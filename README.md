@@ -8,15 +8,21 @@ This repo contains the canonical manifest and integration documentation for the 
 
 ## For Merchants: Add PayClaw to Your UCP Manifest
 
-Add this to the `capabilities` array in your `/.well-known/ucp`:
+Add this to the `capabilities` object in your `/.well-known/ucp`:
 
 ```json
 {
-  "name": "io.payclaw.common.identity",
-  "version": "2026-03-02",
-  "extends": "dev.ucp.shopping.checkout",
-  "spec": "https://payclaw.io/docs/ucp-identity",
-  "schema": "https://payclaw.io/schema/identity"
+  "io.payclaw.common.identity": [
+    {
+      "version": "2026-01-11",
+      "spec": "https://payclaw.io/ucp/spec/identity",
+      "schema": "https://payclaw.io/ucp/schemas/identity.json",
+      "extends": "dev.ucp.shopping.checkout",
+      "config": {
+        "required": false
+      }
+    }
+  ]
 }
 ```
 
@@ -26,41 +32,65 @@ That's it. Agents visiting your store will discover PayClaw and prompt their use
 
 1. A UCP-compliant agent reads your `/.well-known/ucp` manifest
 2. It sees `io.payclaw.common.identity` in the capabilities
-3. If the agent has a PayClaw badge, it includes an `identity_declaration` in its checkout request
-4. If it doesn't, it prompts the user: *"This store verifies user-authorized agents. Run `npx -y @payclaw/mcp-server` to authorize me to continue."*
+3. If the agent has a PayClaw badge, it includes an `io.payclaw.common.identity` object in its checkout request
+4. If it doesn't, it prompts the user: *"This store verifies user-authorized agents. Run `npx -y @payclaw/badge` to authorize me to continue."*
 
 ### `config.required`
-
-```json
-{
-  "name": "io.payclaw.common.identity",
-  "version": "2026-03-02",
-  "extends": "dev.ucp.shopping.checkout",
-  "spec": "https://payclaw.io/docs/ucp-identity",
-  "schema": "https://payclaw.io/schema/identity",
-  "config": {
-    "required": false
-  }
-}
-```
 
 - `required: false` (default) — declared agents are preferred but checkout proceeds without a badge
 - `required: true` — agents without a valid badge receive `requires_escalation`, forcing a user handoff through PayClaw's OAuth flow
 
 ---
 
-## How Verification Works
+## Merchant Verification
 
-When an agent presents a PayClaw badge at checkout, verify it with one HTTP call. No API key. No PayClaw account required.
+Verify a PayClaw Badge JWT locally — no API call to PayClaw, no uptime dependency.
+
+### Option 1: `verify()` from `@payclaw/badge` (recommended)
+
+```bash
+npm install @payclaw/badge
+```
+
+```typescript
+import { verify } from '@payclaw/badge/verify'
+
+// In your checkout handler (createCheckout, updateCheckout, completeCheckout):
+const identity = await verify(req.body['io.payclaw.common.identity']?.token)
+
+if (identity) {
+  // Verified — log the trip, apply tier pricing, trust the agent
+  console.log(identity.userId, identity.agentId, identity.intent)
+  console.log(identity.scopes)       // e.g. ['checkout:complete']
+  console.log(identity.issuedAt)     // Unix timestamp
+  console.log(identity.expiresAt)    // Unix timestamp
+  console.log(identity.kid)          // Key ID used to sign
+}
+// if null: no badge or invalid — proceed as guest checkout
+```
+
+`verify()` fetches PayClaw's [JWKS](#signing-keys) once, caches it for 1 hour, and verifies the ES256 signature locally using the Web Crypto API. It never throws — returns `null` on any error.
+
+**Options:**
+
+```typescript
+verify(token, {
+  jwksUri: 'https://payclaw.io/.well-known/ucp',  // default
+  cacheTtlMs: 3600000,                              // 1 hour default
+  clockToleranceSec: 30,                             // default
+})
+```
+
+### Option 2: Token introspection (server-side)
 
 ```http
 POST https://payclaw.io/api/oauth/introspect
 Content-Type: application/x-www-form-urlencoded
 
-token=pc_v1_...
+token=<badge-jwt>
 ```
 
-### Active token
+Active token response:
 
 ```json
 {
@@ -73,15 +103,36 @@ token=pc_v1_...
 }
 ```
 
-### Invalid, expired, or revoked token
+Invalid, expired, or revoked: `{"active": false}` per [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662).
 
-```json
-{
-  "active": false
-}
+### Python (conceptual)
+
+```python
+import jwt  # PyJWT
+import requests
+
+# Fetch PayClaw's public keys
+profile = requests.get("https://payclaw.io/.well-known/ucp").json()
+jwks = {k["kid"]: k for k in profile["signing_keys"]}
+
+# Verify
+header = jwt.get_unverified_header(token)
+key = jwks[header["kid"]]
+identity = jwt.decode(token, key, algorithms=["ES256"])
 ```
 
-Per [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662): the response for invalid, expired, revoked, and unknown tokens is always `{"active": false}`. No additional fields. No information leakage.
+---
+
+## Signing Keys
+
+PayClaw signs Badge JWTs using ES256 (ECDSA with P-256 and SHA-256). Public keys are published at:
+
+| Resource | URL |
+|----------|-----|
+| Platform profile | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) → `signing_keys[]` |
+| JWKS (RFC 7517) | [`payclaw.io/.well-known/jwks.json`](https://payclaw.io/.well-known/jwks.json) |
+
+Key rotation requires a 24-hour notice period with dual-key support during the transition window. Subscribe to this repo for rotation announcements.
 
 ---
 
@@ -98,33 +149,16 @@ Merchants can use `assurance_level` to make graduated trust decisions. A `starte
 
 ---
 
-## What Agents Present at Checkout
-
-A declared agent includes this payload in its UCP checkout request:
-
-```json
-{
-  "identity_declaration": {
-    "credential_provider": "io.payclaw.common.identity",
-    "badge_status": "declared"
-  }
-}
-```
-
-`badge_status: declared` means the agent presented a valid PayClaw consent key. A verified human principal authorized the session via Google or Apple sign-in.
-
----
-
-## OAuth Discovery
-
-Merchants discover the introspection endpoint automatically via standard OAuth metadata:
+## Discovery & References
 
 | Resource | URL |
 |----------|-----|
+| Extension spec | [`payclaw.io/ucp/spec/identity`](https://payclaw.io/ucp/spec/identity) |
+| JSON Schema | [`payclaw.io/ucp/schemas/identity.json`](https://payclaw.io/ucp/schemas/identity.json) |
+| Platform profile | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) |
+| JWKS | [`payclaw.io/.well-known/jwks.json`](https://payclaw.io/.well-known/jwks.json) |
 | OAuth metadata | [`payclaw.io/.well-known/oauth-authorization-server`](https://payclaw.io/.well-known/oauth-authorization-server) |
-| JSON Schema | [`payclaw.io/schema/identity`](https://payclaw.io/schema/identity) |
-| Extension docs | [`payclaw.io/docs/ucp-identity`](https://payclaw.io/docs/ucp-identity) |
-| UCP manifest | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) |
+| OAuth template | [`payclaw.io/merchant-templates/oauth-discovery.json`](https://payclaw.io/merchant-templates/oauth-discovery.json) |
 | UCP specification | [`ucp.dev`](https://ucp.dev) |
 
 ---
@@ -137,7 +171,7 @@ This repo is the **merchant-facing protocol spec**. If you're a developer or an 
 |---|---|---|
 | **Audience** | Merchants, UCP frameworks | Developers, AI agents |
 | **Contains** | Manifest, schema, integration docs | MCP server, OAuth device flow |
-| **Install** | Add capability to `/.well-known/ucp` | `npx -y @payclaw/mcp-server` |
+| **Install** | Add capability to `/.well-known/ucp` | `npx -y @payclaw/badge` |
 
 Users authorize agents at: [payclaw.io/activate](https://payclaw.io/activate)
 
