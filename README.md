@@ -54,22 +54,41 @@ npm install @payclaw/badge
 
 ```typescript
 import { verify } from '@payclaw/badge/verify'
+// Also available as: import { verify } from '@payclaw/badge'
 
 // In your checkout handler (createCheckout, updateCheckout, completeCheckout):
 const identity = await verify(req.body['io.payclaw.common.identity']?.token)
 
 if (identity) {
   // Verified — log the trip, apply tier pricing, trust the agent
-  console.log(identity.userId, identity.agentId, identity.intent)
-  console.log(identity.scopes)       // e.g. ['checkout:complete']
-  console.log(identity.issuedAt)     // Unix timestamp
-  console.log(identity.expiresAt)    // Unix timestamp
-  console.log(identity.kid)          // Key ID used to sign
+  console.log(identity.userId)         // PayClaw user ID
+  console.log(identity.agentId)        // MCP client / agent identifier
+  console.log(identity.intent)         // declared purchase intent
+  console.log(identity.scopes)         // e.g. ['checkout:complete']
+  console.log(identity.merchantDomain) // merchant domain (if scoped)
+  console.log(identity.issuedAt)       // Unix timestamp
+  console.log(identity.expiresAt)      // Unix timestamp
+  console.log(identity.kid)            // Key ID used to sign
 }
 // if null: no badge or invalid — proceed as guest checkout
 ```
 
-`verify()` fetches PayClaw's [JWKS](#signing-keys) once, caches it for 1 hour, and verifies the ES256 signature locally using the Web Crypto API. It never throws — returns `null` on any error.
+**Return type:**
+
+```typescript
+interface PayClawIdentity {
+  userId: string           // PayClaw user ID
+  agentId: string          // MCP client / agent identifier
+  intent: string           // declared purchase intent
+  scopes: string[]         // authorized scopes (e.g. ['checkout:complete'])
+  merchantDomain?: string  // merchant domain token was scoped to (if present)
+  issuedAt: number         // Unix timestamp
+  expiresAt: number        // Unix timestamp
+  kid: string              // Key ID used to sign
+}
+```
+
+`verify()` fetches PayClaw's [JWKS](#signing-keys) once, caches it for 1 hour, and verifies the ES256 signature locally using the Web Crypto API. It never throws — returns `null` on any error. Works in Node.js 18+ and Cloudflare Workers (Web Crypto API only, zero dependencies).
 
 **Options:**
 
@@ -105,7 +124,7 @@ Active token response:
 
 Invalid, expired, or revoked: `{"active": false}` per [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662).
 
-### Python (conceptual)
+### Python (PyJWT)
 
 ```python
 import jwt  # PyJWT
@@ -148,6 +167,48 @@ Key rotation requires a 24-hour notice period with dual-key support during the t
 | `elite` | 200+ verified transactions |
 
 Merchants can use `assurance_level` to make graduated trust decisions. A `starter` badge still proves human authorization — it just has less transaction history.
+
+---
+
+## Agent-Side UCP Flow
+
+When an agent calls `payclaw_getAgentIdentity` with a `merchantUrl`, PayClaw checks the merchant's `/.well-known/ucp` manifest for `io.payclaw.common.identity` support.
+
+### UCP-capable merchant response
+
+If the merchant declares our extension, the tool returns a `checkoutPatch` the agent merges into the checkout payload:
+
+```json
+{
+  "token": "eyJhbGciOiJFUzI1NiIs...",
+  "ucpCapable": true,
+  "requiredByMerchant": false,
+  "checkoutPatch": {
+    "io.payclaw.common.identity": {
+      "token": "eyJhbGciOiJFUzI1NiIs...",
+      "kid": "payclaw-badge-v1"
+    }
+  },
+  "instructions": "Merge checkoutPatch into your checkout payload, then call payclaw_reportBadgePresented with the merchantUrl and token."
+}
+```
+
+### Non-UCP merchant response
+
+If the merchant doesn't declare our extension (or the manifest is unreachable), the tool still returns a valid token:
+
+```json
+{
+  "token": "eyJhbGciOiJFUzI1NiIs...",
+  "ucpCapable": false
+}
+```
+
+### Recording presentation
+
+After merging `checkoutPatch`, the agent calls `payclaw_reportBadgePresented` with `merchantUrl` and `token`. The tool returns `{ "recorded": true }` on success.
+
+Idempotency and expired-token handling are enforced server-side.
 
 ---
 
