@@ -1,12 +1,42 @@
 # PayClaw UCP Extension — `io.payclaw.common.identity`
 
-PayClaw is a UCP Credential Provider. We issue OAuth 2.0 access tokens ("badges") that prove an AI agent is acting on behalf of an authorized human. Merchants who declare our extension bypass bot-mitigation for badged agents.
+Agents are not bots. PayClaw proves it.
 
-This repo contains the canonical manifest and integration documentation for the `io.payclaw.common.identity` extension to the [Universal Commerce Protocol](https://ucp.dev).
+PayClaw is a [UCP](https://ucp.dev) Credential Provider. We issue signed JWTs ("badges") that prove an AI agent is acting on behalf of an authorized human. Merchants who declare our extension get agent traffic that converts — without weakening bot defenses.
+
+**Extension endpoints are live at `payclaw.io`.**
 
 ---
 
-## For Merchants: Add PayClaw to Your UCP Manifest
+## Why Declare PayClaw
+
+Your bot defenses work. PayClaw makes them smarter.
+
+Agents carrying a PayClaw badge have a verified human principal, declared purchase intent, and trip-level authorization. When you declare `io.payclaw.common.identity`, UCP-compliant agents discover it automatically and present their credential at checkout. You verify it locally in 10 lines — no API call to PayClaw, no uptime dependency.
+
+- **Zero risk to declare.** `required: false` means checkout never blocks. If an agent doesn't have a badge, it proceeds as guest.
+- **Graduated trust.** Use `assurance_level` to give badged agents better pricing, skip CAPTCHAs, or fast-track checkout.
+- **No new infrastructure.** Add a JSON block to your existing `/.well-known/ucp` manifest. Verify with one npm package or a standard JWKS flow.
+
+---
+
+## How It Works
+
+```
+1. Merchant adds io.payclaw.common.identity to /.well-known/ucp
+2. Agent reads merchant manifest, discovers PayClaw extension
+3. Agent calls payclaw_getAgentIdentity({ merchantUrl })
+4. PayClaw checks merchant manifest → returns checkoutPatch
+5. Agent merges checkoutPatch into checkout payload
+6. Merchant calls verify(token) → gets PayClawIdentity
+7. Agent calls payclaw_reportBadgePresented → trip recorded
+```
+
+If the manifest fetch fails or the merchant doesn't declare PayClaw, the agent proceeds without a badge. Nothing breaks.
+
+---
+
+## For Merchants: Add PayClaw to Your Manifest
 
 Add this to the `capabilities` object in your `/.well-known/ucp`:
 
@@ -26,18 +56,9 @@ Add this to the `capabilities` object in your `/.well-known/ucp`:
 }
 ```
 
-That's it. Agents visiting your store will discover PayClaw and prompt their users to authorize if they haven't already.
-
-### What Happens Next
-
-1. A UCP-compliant agent reads your `/.well-known/ucp` manifest
-2. It sees `io.payclaw.common.identity` in the capabilities
-3. If the agent has a PayClaw badge, it includes an `io.payclaw.common.identity` object in its checkout request
-4. If it doesn't, it prompts the user: *"This store verifies user-authorized agents. Run `npx -y @payclaw/badge` to authorize me to continue."*
-
 ### `config.required`
 
-- `required: false` (default) — declared agents are preferred but checkout proceeds without a badge
+- `required: false` (default) — badged agents are preferred but checkout proceeds without a badge
 - `required: true` — agents without a valid badge receive `requires_escalation`, forcing a user handoff through PayClaw's OAuth flow
 
 ---
@@ -88,7 +109,11 @@ interface PayClawIdentity {
 }
 ```
 
-`verify()` fetches PayClaw's [JWKS](#signing-keys) once, caches it for 1 hour, and verifies the ES256 signature locally using the Web Crypto API. It never throws — returns `null` on any error. Works in Node.js 18+ and Cloudflare Workers (Web Crypto API only, zero dependencies).
+`verify()` fetches PayClaw's [JWKS](#signing-keys) once, caches it for 1 hour, and verifies the ES256 signature locally using the Web Crypto API. Never throws — returns `null` on any error.
+
+- **Zero runtime dependencies**
+- **Web Crypto API only** — works in Node.js 18+ and Cloudflare Workers
+- **JWKS cached in-memory** — never re-fetched on every call
 
 **Options:**
 
@@ -150,7 +175,7 @@ PayClaw signs Badge JWTs using ES256 (ECDSA with P-256 and SHA-256). Public keys
 
 | Resource | URL |
 |----------|-----|
-| Platform profile | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) → `signing_keys[]` |
+| Platform profile | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) — `signing_keys[]` |
 | JWKS (RFC 7517) | [`payclaw.io/.well-known/jwks.json`](https://payclaw.io/.well-known/jwks.json) |
 
 Key rotation requires a 24-hour notice period with dual-key support during the transition window. Subscribe to this repo for rotation announcements.
@@ -172,15 +197,14 @@ Merchants can use `assurance_level` to make graduated trust decisions. A `starte
 
 ## Agent-Side UCP Flow
 
-When an agent calls `payclaw_getAgentIdentity` with a `merchantUrl`, PayClaw checks the merchant's `/.well-known/ucp` manifest for `io.payclaw.common.identity` support.
+When an agent calls `payclaw_getAgentIdentity` with a `merchantUrl`, PayClaw fetches the merchant's `/.well-known/ucp` manifest and checks for `io.payclaw.common.identity`.
 
-### UCP-capable merchant response
+### UCP-capable merchant
 
-If the merchant declares our extension, the tool returns a `checkoutPatch` the agent merges into the checkout payload:
+The tool returns a `checkoutPatch` the agent merges directly into the checkout payload:
 
 ```json
 {
-  "token": "eyJhbGciOiJFUzI1NiIs...",
   "ucpCapable": true,
   "requiredByMerchant": false,
   "checkoutPatch": {
@@ -193,22 +217,54 @@ If the merchant declares our extension, the tool returns a `checkoutPatch` the a
 }
 ```
 
-### Non-UCP merchant response
+### Non-UCP merchant
 
-If the merchant doesn't declare our extension (or the manifest is unreachable), the tool still returns a valid token:
+If the merchant doesn't declare the extension (or the manifest is unreachable), the tool still returns a valid token. Nothing breaks — the agent proceeds without UCP enrichment.
 
 ```json
 {
-  "token": "eyJhbGciOiJFUzI1NiIs...",
   "ucpCapable": false
+}
+```
+
+### Version compatibility
+
+If the merchant declares `io.payclaw.common.identity` but with an incompatible version, the response includes a warning:
+
+```json
+{
+  "ucpCapable": false,
+  "ucpWarning": "version mismatch: merchant declares 2025-01-01"
 }
 ```
 
 ### Recording presentation
 
-After merging `checkoutPatch`, the agent calls `payclaw_reportBadgePresented` with `merchantUrl` and `token`. The tool returns `{ "recorded": true }` on success.
+After merging `checkoutPatch`, the agent calls `payclaw_reportBadgePresented` with `merchantUrl` and `token`. Returns `{ "recorded": true }` on success.
 
 Idempotency and expired-token handling are enforced server-side.
+
+### Security
+
+- Manifest fetches are **HTTPS-only** with SSRF protection (blocks localhost, private IPs, link-local, metadata endpoints)
+- **3-second timeout** — manifest fetch never blocks the tool response
+- **5-minute domain cache** — repeated calls to the same merchant don't re-fetch
+- Public keys contain **no private key material** — `d` field is never present
+
+---
+
+## What's New (v0.7.6)
+
+| Capability | Description |
+|---|---|
+| `verify()` export | Merchant-side JWT verification — 10 lines, zero dependencies, Web Crypto only |
+| UCP-aware `getAgentIdentity` | Checks merchant manifest, returns `checkoutPatch` when `io.payclaw.common.identity` is declared |
+| `reportBadgePresented` | Records trip presentation with structured `{ recorded: true }` response |
+| Extension schema live | `payclaw.io/ucp/schemas/identity.json` — agents can now validate namespace governance |
+| Spec page live | `payclaw.io/ucp/spec/identity` — human-readable extension documentation |
+| Platform profile with signing keys | `payclaw.io/.well-known/ucp` — `signing_keys[]` JWK array for key discovery |
+| SSRF protection | Manifest fetcher blocks private/reserved origins |
+| OAuth discovery template | `payclaw.io/merchant-templates/oauth-discovery.json` |
 
 ---
 
@@ -228,13 +284,14 @@ Idempotency and expired-token handling are enforced server-side.
 
 ## For Agents / Developers
 
-This repo is the **merchant-facing protocol spec**. If you're a developer or an agent looking to declare identity, see [payclaw/badge-server](https://github.com/payclaw/badge-server) — the MCP server that agents use to badge themselves.
+This repo is the **merchant-facing protocol spec**. If you're a developer or an agent looking to declare identity:
 
-| | This repo (`ucp-agent-badge`) | `badge-server` |
-|---|---|---|
-| **Audience** | Merchants, UCP frameworks | Developers, AI agents |
-| **Contains** | Manifest, schema, integration docs | MCP server, OAuth device flow |
-| **Install** | Add capability to `/.well-known/ucp` | `npx -y @payclaw/badge` |
+| | This repo (`ucp-agent-badge`) | `badge-server` | `mcp-server` |
+|---|---|---|---|
+| **Audience** | Merchants, UCP frameworks | Developers, AI agents | Developers, AI agents |
+| **Contains** | Manifest, schema, integration docs | Badge-only MCP server | Badge + Spend MCP server |
+| **Install** | Add capability to `/.well-known/ucp` | `npx -y @payclaw/badge` | `npx -y @payclaw/mcp-server` |
+| **Repo** | [payclaw/ucp-agent-badge](https://github.com/payclaw/ucp-agent-badge) | [payclaw/badge-server](https://github.com/payclaw/badge-server) | [payclaw/mcp-server](https://github.com/payclaw/mcp-server) |
 
 Users authorize agents at: [payclaw.io/activate](https://payclaw.io/activate)
 
