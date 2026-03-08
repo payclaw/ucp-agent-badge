@@ -4,6 +4,16 @@ PayClaw is a UCP Credential Provider. We issue OAuth 2.0 access tokens ("badges"
 
 This repo contains the canonical manifest and integration documentation for the `io.payclaw.common.identity` extension to the [Universal Commerce Protocol](https://ucp.dev).
 
+### Repository Contents
+
+| File | Description |
+|------|-------------|
+| [`manifest.json`](manifest.json) | Canonical UCP manifest for the PayClaw identity extension |
+| [`schema/io.payclaw.common.identity.json`](schema/io.payclaw.common.identity.json) | JSON Schema (Draft 2020-12) for the extension payload |
+| [`examples/merchant-manifest.json`](examples/merchant-manifest.json) | Reference manifest a merchant places at `/.well-known/ucp` |
+| [`examples/integration-example.md`](examples/integration-example.md) | 4-step integration walkthrough with code |
+| [`how-it-works.md`](how-it-works.md) | Architecture overview — what a UCP credential provider is, how PayClaw fits |
+
 ---
 
 ## For Merchants: Add PayClaw to Your UCP Manifest for User Verification

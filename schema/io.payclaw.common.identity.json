@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://payclaw.io/schema/identity",
+  "title": "PayClaw Agent Identity Extension",
+  "description": "UCP extension schema for io.payclaw.common.identity. Defines the payload an agent includes in the checkout request under the 'io.payclaw.common.identity' key.",
+  "type": "object",
+  "required": ["token", "kid"],
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "ES256-signed JWT issued by PayClaw. Verify locally with @payclaw/badge/verify — no API call required.",
+      "minLength": 1
+    },
+    "kid": {
+      "type": "string",
+      "description": "Key ID used to sign the token. Matches a key in the JWKS at payclaw.io/.well-known/ucp.",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBheWNsYXctYmFkZ2UtdjEifQ...",
+      "kid": "payclaw-badge-v1"
+    }
+  ]
+}
