@@ -32,6 +32,8 @@ Add this to the `capabilities` array in your `/.well-known/ucp`:
 
 That's it. Agents visiting your store will discover PayClaw and prompt their users to authorize if they haven't already.
 
+> **Not on UCP yet?** See [Google's UCP Getting Started Guide](https://developers.google.com/merchant/ucp) to set up your merchant manifest.
+
 ### What Happens Next
 
 1. A UCP-compliant agent reads your `/.well-known/ucp` manifest
