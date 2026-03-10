@@ -13,14 +13,14 @@
     },
     "kid": {
       "type": "string",
-      "description": "Key ID used to sign the token. Matches a key in the JWKS at payclaw.io/.well-known/ucp.",
+      "description": "Key ID used to sign the token. Matches a key in the issuer's JWKS, discoverable via the OAuth authorization server metadata.",
       "minLength": 1
     }
   },
   "additionalProperties": false,
   "examples": [
     {
-      "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBheWNsYXctYmFkZ2UtdjEifQ...",
+      "token": "<example-es256-jwt>",
       "kid": "payclaw-badge-v1"
     }
   ]
