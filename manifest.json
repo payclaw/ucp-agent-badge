@@ -4,11 +4,11 @@
   },
   "capabilities": [
     {
-      "name": "io.payclaw.common.identity",
+      "name": "io.kyalabs.common.identity",
       "version": "2026-03-02",
       "extends": "dev.ucp.shopping.checkout",
-      "spec": "https://payclaw.io/docs/ucp-identity",
-      "schema": "https://payclaw.io/schema/identity"
+      "spec": "https://kyalabs.io/docs/ucp-identity",
+      "schema": "https://kyalabs.io/schema/identity"
     }
   ]
 }
