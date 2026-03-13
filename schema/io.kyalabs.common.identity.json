@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://payclaw.io/schema/identity",
-  "title": "PayClaw Agent Identity Extension",
-  "description": "UCP extension schema for io.payclaw.common.identity. Defines the payload an agent includes in the checkout request under the 'io.payclaw.common.identity' key.",
+  "$id": "https://kyalabs.io/schema/identity",
+  "title": "kyaLabs Agent Identity Extension",
+  "description": "UCP extension schema for io.kyalabs.common.identity. Defines the payload an agent includes in the checkout request under the 'io.kyalabs.common.identity' key.",
   "type": "object",
   "required": ["token", "kid"],
   "properties": {
     "token": {
       "type": "string",
-      "description": "ES256-signed JWT issued by PayClaw. Verify locally with @payclaw/badge/verify — no API call required.",
+      "description": "ES256-signed JWT issued by kyaLabs. Verify locally against JWKS at kyalabs.io/.well-known/ucp. See reference/verify.ts for the verification algorithm.",
       "minLength": 1
     },
     "kid": {
@@ -21,7 +21,7 @@
   "examples": [
     {
       "token": "<example-es256-jwt>",
-      "kid": "payclaw-badge-v1"
+      "kid": "kyalabs-badge-v1"
     }
   ]
 }

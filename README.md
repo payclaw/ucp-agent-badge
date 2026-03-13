@@ -1,56 +1,57 @@
-# PayClaw UCP Extension — `io.payclaw.common.identity`
+# kyaLabs UCP Extension — `io.kyalabs.common.identity`
 
-PayClaw is a UCP Credential Provider. We issue OAuth 2.0 access tokens ("badges") that prove an AI agent is acting on behalf of an authorized human. Merchants who declare our extension bypass bot-mitigation for badged agents.
+kyaLabs is a UCP Credential Provider. We issue ES256-signed JWTs ("badges") that prove an AI agent is acting on behalf of an authorized human. Merchants who declare our extension can verify badged agents at checkout using standard cryptographic verification — no API call to kyaLabs required.
 
-This repo contains the canonical manifest and integration documentation for the `io.payclaw.common.identity` extension to the [Universal Commerce Protocol](https://ucp.dev).
+This repo contains the canonical manifest, schema, and reference implementation for the `io.kyalabs.common.identity` extension to the [Universal Commerce Protocol](https://ucp.dev).
 
 ### Repository Contents
 
 | File | Description |
 |------|-------------|
-| [`manifest.json`](manifest.json) | Canonical UCP manifest for the PayClaw identity extension |
-| [`schema/io.payclaw.common.identity.json`](schema/io.payclaw.common.identity.json) | JSON Schema (Draft 2020-12) for the extension payload |
+| [`manifest.json`](manifest.json) | Canonical UCP manifest for the kyaLabs identity extension |
+| [`schema/io.kyalabs.common.identity.json`](schema/io.kyalabs.common.identity.json) | JSON Schema (Draft 2020-12) for the extension payload |
+| [`reference/verify.ts`](reference/verify.ts) | Reference implementation — badge JWT verification (TypeScript) |
+| [`reference/verify.test.ts`](reference/verify.test.ts) | Test suite for the reference implementation |
 | [`examples/merchant-manifest.json`](examples/merchant-manifest.json) | Reference manifest a merchant places at `/.well-known/ucp` |
-| [`examples/integration-example.md`](examples/integration-example.md) | 4-step integration walkthrough with code |
-| [`how-it-works.md`](how-it-works.md) | Architecture overview — what a UCP credential provider is, how PayClaw fits |
+| [`examples/integration-example.md`](examples/integration-example.md) | Integration walkthrough with verification steps |
+| [`how-it-works.md`](how-it-works.md) | Architecture overview — what a UCP credential provider is, how kyaLabs fits |
 
 ---
 
-## For Merchants: Add PayClaw to Your UCP Manifest for User Verification
+## For Merchants: Add kyaLabs to Your UCP Manifest
 
 Add this to the `capabilities` array in your `/.well-known/ucp`:
 
 ```json
 {
-  "name": "io.payclaw.common.identity",
+  "name": "io.kyalabs.common.identity",
   "version": "2026-03-02",
   "extends": "dev.ucp.shopping.checkout",
-  "spec": "https://payclaw.io/docs/ucp-identity",
-  "schema": "https://payclaw.io/schema/identity"
+  "spec": "https://kyalabs.io/docs/ucp-identity",
+  "schema": "https://kyalabs.io/schema/identity"
 }
 ```
 
-That's it. Agents visiting your store will discover PayClaw and prompt their users to authorize if they haven't already.
+That's it. Agents visiting your store will discover kyaLabs and present a cryptographic badge when they have one.
 
 > **Not on UCP yet?** See [Google's UCP Getting Started Guide](https://developers.google.com/merchant/ucp) to set up your merchant manifest.
 
 ### What Happens Next
 
 1. A UCP-compliant agent reads your `/.well-known/ucp` manifest
-2. It sees `io.payclaw.common.identity` in the capabilities
-3. If the agent has a PayClaw badge, it includes an `identity_declaration` in its checkout request
-4. If it doesn't, it prompts the user: *"This store verifies user-authorized agents. Run `npx -y @payclaw/mcp-server` to authorize me to continue."*
-   -  (See [payclaw/badge-server](https://github.com/payclaw/badge-server) for more detail) 
+2. It sees `io.kyalabs.common.identity` in the capabilities
+3. If the agent has a kyaLabs badge, it includes an `identity_declaration` in its checkout request
+4. You verify the token locally using the algorithm below
 
 ### `config.required`
 
 ```json
 {
-  "name": "io.payclaw.common.identity",
+  "name": "io.kyalabs.common.identity",
   "version": "2026-03-02",
   "extends": "dev.ucp.shopping.checkout",
-  "spec": "https://payclaw.io/docs/ucp-identity",
-  "schema": "https://payclaw.io/schema/identity",
+  "spec": "https://kyalabs.io/docs/ucp-identity",
+  "schema": "https://kyalabs.io/schema/identity",
   "config": {
     "required": false
   }
@@ -58,16 +59,67 @@ That's it. Agents visiting your store will discover PayClaw and prompt their use
 ```
 
 - `required: false` (default) — declared agents are preferred but checkout proceeds without a badge
-- `required: true` — agents without a valid badge receive `requires_escalation`, forcing a user handoff through PayClaw's OAuth flow
+- `required: true` — agents without a valid badge receive `requires_escalation`, forcing a user handoff through kyaLabs's OAuth flow
 
 ---
 
 ## How Verification Works
 
-When an agent presents a PayClaw badge at checkout, verify it with one HTTP call. No API key. No PayClaw account required.
+Per [UCP's credential verification model](https://github.com/Universal-Commerce-Protocol/ucp), badges are verified locally using published signing keys. No API call to kyaLabs is required at verification time.
+
+### Verification Algorithm
+
+```
+1. Receive the token from the checkout payload
+   └─ Field: io.kyalabs.common.identity.token
+
+2. Decode the JWT header (base64url → JSON)
+   └─ Extract `kid` (Key ID)
+   └─ Verify `alg` is "ES256"
+
+3. Fetch signing keys from https://kyalabs.io/.well-known/ucp
+   └─ Keys are in the `signing_keys[]` array (UCP profile format)
+   └─ Cache the response — recommended TTL: 1 hour
+
+4. Find the key matching `kid`
+   └─ Key type: EC, curve: P-256
+
+5. Verify ES256 (ECDSA P-256 + SHA-256) signature
+   └─ Signed data: <header_b64>.<payload_b64>
+   └─ Signature: third JWT segment (base64url-decoded)
+
+6. Check the `exp` claim
+   └─ Reject if expired (allow ~30s clock tolerance)
+
+7. Extract identity claims from the JWT payload
+```
+
+A TypeScript reference implementation is provided at [`reference/verify.ts`](reference/verify.ts). Implement this algorithm in your server-side language — libraries for JWKS + ES256 exist on every major platform.
+
+### Verified Identity Claims
+
+| Claim | Type | Maps to |
+|-------|------|---------|
+| `sub` | `string` | Human principal who authorized the agent |
+| `agent_id` | `string` | Agent identifier |
+| `intent` | `string` | Declared purchase intent |
+| `scopes` | `string[]` | Authorization scopes granted |
+| `merchant_domain` | `string?` | Target merchant domain (when declared) |
+| `iat` | `number` | Token issued — Unix timestamp |
+| `exp` | `number` | Token expires — Unix timestamp |
+
+### On failure
+
+Any verification failure — invalid signature, expired token, unknown key, malformed JWT — should return no identity. Proceed as guest. Your existing defenses stay intact.
+
+---
+
+## Alternative: HTTP Introspect (RFC 7662)
+
+For merchants who prefer server-side token lookup over local JWT verification, kyaLabs also exposes an [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662) introspection endpoint. No API key required.
 
 ```http
-POST https://payclaw.io/api/oauth/introspect
+POST https://kyalabs.io/api/oauth/introspect
 Content-Type: application/x-www-form-urlencoded
 
 token=pc_v1_...
@@ -79,7 +131,7 @@ token=pc_v1_...
 {
   "active": true,
   "scope": "ucp:scopes:checkout_session",
-  "credential_provider": "io.payclaw.common.identity",
+  "credential_provider": "io.kyalabs.common.identity",
   "badge_status": "declared",
   "assurance_level": "regular",
   "token_type": "Bearer"
@@ -94,7 +146,9 @@ token=pc_v1_...
 }
 ```
 
-Per [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662): the response for invalid, expired, revoked, and unknown tokens is always `{"active": false}`. No additional fields. No information leakage.
+Per RFC 7662: the response for invalid, expired, revoked, and unknown tokens is always `{"active": false}`. No information leakage.
+
+> **Note:** Local JWKS verification (above) is recommended for production checkout flows. It has no network dependency on kyaLabs and aligns with UCP's cryptographic verification model. HTTP introspect is useful for real-time revocation checks or environments where local JWT verification is impractical.
 
 ---
 
@@ -118,45 +172,45 @@ A declared agent includes this payload in its UCP checkout request:
 ```json
 {
   "identity_declaration": {
-    "credential_provider": "io.payclaw.common.identity",
+    "credential_provider": "io.kyalabs.common.identity",
     "badge_status": "declared"
   }
 }
 ```
 
-`badge_status: declared` means the agent presented a valid PayClaw consent key. A verified human principal authorized the session via Google or Apple sign-in.
+`badge_status: declared` means the agent presented a valid kyaLabs consent key. A verified human principal authorized the session via Google or Apple sign-in.
 
 ---
 
 ## OAuth Discovery
 
-Merchants discover the introspection endpoint automatically via standard OAuth metadata:
+Merchants discover signing keys and metadata automatically via standard endpoints:
 
 | Resource | URL |
 |----------|-----|
-| OAuth metadata | [`payclaw.io/.well-known/oauth-authorization-server`](https://payclaw.io/.well-known/oauth-authorization-server) |
-| JSON Schema | [`payclaw.io/schema/identity`](https://payclaw.io/schema/identity) |
-| Extension docs | [`payclaw.io/docs/ucp-identity`](https://payclaw.io/docs/ucp-identity) |
-| UCP manifest | [`payclaw.io/.well-known/ucp`](https://payclaw.io/.well-known/ucp) |
+| Signing keys (JWKS) | [`kyalabs.io/.well-known/ucp`](https://kyalabs.io/.well-known/ucp) |
+| OAuth metadata | [`kyalabs.io/.well-known/oauth-authorization-server`](https://kyalabs.io/.well-known/oauth-authorization-server) |
+| JSON Schema | [`kyalabs.io/schema/identity`](https://kyalabs.io/schema/identity) |
+| Extension docs | [`kyalabs.io/docs/ucp-identity`](https://kyalabs.io/docs/ucp-identity) |
 | UCP specification | [`ucp.dev`](https://ucp.dev) |
 
 ---
 
 ## For Agents / Developers
 
-This repo is the **merchant-facing protocol spec**. If you're a developer or an agent looking to declare identity, see [payclaw/badge-server](https://github.com/payclaw/badge-server) — the MCP server that agents use to badge themselves.
+This repo is the **merchant-facing protocol spec**. If you're a developer or an agent looking to declare identity, see [kyalabs/badge-server](https://github.com/kyalabs/badge-server) — the MCP server that agents use to badge themselves.
 
 | | This repo (`ucp-agent-badge`) | `badge-server` |
 |---|---|---|
 | **Audience** | Merchants, UCP frameworks | Developers, AI agents |
-| **Contains** | Manifest, schema, integration docs | MCP server, OAuth device flow |
-| **Install** | Add capability to `/.well-known/ucp` | `npx -y @payclaw/mcp-server` |
+| **Contains** | Manifest, schema, reference implementation | MCP server, OAuth device flow |
+| **Integration** | Add capability to `/.well-known/ucp`, implement verification | `npx -y @payclaw/badge` |
 
-Users authorize agents at: [payclaw.io/activate](https://payclaw.io/activate)
+Users authorize agents at: [kyalabs.io/activate](https://kyalabs.io/activate)
 
-Full merchant documentation: [payclaw.io/merchants](https://payclaw.io/merchants)
+Full merchant documentation: [kyalabs.io/merchants](https://kyalabs.io/merchants)
 
-Trust architecture: [payclaw.io/trust](https://payclaw.io/trust)
+Trust architecture: [kyalabs.io/trust](https://kyalabs.io/trust)
 
 ---
 

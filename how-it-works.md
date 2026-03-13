@@ -1,12 +1,12 @@
-# How PayClaw Works
+# How kyaLabs Works
 
 ## What is a UCP Credential Provider?
 
 The [Universal Commerce Protocol (UCP)](https://ucp.dev) defines how AI agents interact with merchants. A credential provider is a service that issues verified identity claims within UCP. Merchants declare which credential providers they recognize in their `/.well-known/ucp` manifest. Agents present matching credentials at checkout.
 
-PayClaw is a credential provider for agent identity. It proves that the agent operating on a merchant's site is authorized by a real human — not anonymous traffic, not a scraper, not an unattended script.
+kyaLabs is a credential provider for agent identity. It proves that the agent operating on a merchant's site is authorized by a real human — not anonymous traffic, not a scraper, not an unattended script.
 
-## What PayClaw proves
+## What kyaLabs proves
 
 Three things:
 
@@ -18,28 +18,28 @@ This is the difference between an authorized actor and a bot. The architecture e
 
 ## How the flow works
 
-1. A user installs PayClaw and authorizes their agent via consent key
+1. A user installs kyaLabs and authorizes their agent via consent key
 2. The agent arrives at a merchant's site and calls `getAgentIdentity`
-3. PayClaw issues an ES256-signed JWT — the agent's declaration of identity
+3. kyaLabs issues an ES256-signed JWT — the agent's declaration of identity
 4. The agent presents this token to the merchant at checkout via UCP
-5. The merchant verifies the token locally — one function call, no API dependency
+5. The merchant verifies the token locally using JWKS — no API dependency on kyaLabs
 6. The merchant decides: accept, challenge, or deny — on their terms, not the agent's
 
-The merchant's existing defenses stay intact. PayClaw is a signal layer — a skeleton key that tells bot detection "this one is declared and verified." It does not override existing defenses. It proves.
+The merchant's existing defenses stay intact. kyaLabs is a signal layer — a skeleton key that tells bot detection "this one is declared and verified." It does not override existing defenses. It proves.
 
 ## What merchants get
 
 - **Verified agent identity.** Every token maps to a specific agent authorized by a specific human.
 - **Human principal accountability.** The human behind the agent is identified and traceable.
 - **Audit trail.** Every declared trip is logged — who, what, when, which merchant.
-- **Zero PayClaw uptime dependency.** Verification is local. Signing keys are cached. If PayClaw goes down, cached keys continue to work.
+- **Zero kyaLabs uptime dependency.** Verification is local. Signing keys are cached. If kyaLabs goes down, cached keys continue to work.
 
 ## What merchants don't need
 
-- **No PayClaw account.** Merchants verify tokens with `@payclaw/badge/verify` — no signup, no dashboard, no credentials.
-- **No API key.** Verification uses public signing keys fetched from a standard JWKS endpoint.
-- **No integration fee.** The verification package is MIT-licensed.
-- **No new infrastructure.** `verify()` runs in Node.js 18+, Cloudflare Workers, or any runtime with Web Crypto API.
+- **No kyaLabs account.** Merchants verify tokens using published signing keys — no signup, no dashboard, no credentials.
+- **No API key.** Verification uses public signing keys fetched from `kyalabs.io/.well-known/ucp`.
+- **No integration fee.** The verification algorithm is documented and the [reference implementation](reference/verify.ts) is MIT-licensed.
+- **No SDK or package install.** The algorithm is standard JWKS + ES256 — implement it in any server-side language.
 
 ## Trust tiers
 
@@ -58,7 +58,7 @@ A `starter` badge still proves human authorization. The tier reflects history, n
 
 ## Next steps
 
-- [Integration example](examples/integration-example.md) — Add PayClaw verification to your checkout in 4 steps
-- [JSON Schema](schema/io.payclaw.common.identity.json) — Canonical schema for the `io.payclaw.common.identity` extension
-- [payclaw.io/merchants](https://payclaw.io/merchants) — Full merchant documentation
-- [payclaw.io/trust](https://payclaw.io/trust) — Trust architecture
+- [Integration example](examples/integration-example.md) — Add kyaLabs verification to your checkout in 4 steps
+- [JSON Schema](schema/io.kyalabs.common.identity.json) — Canonical schema for the `io.kyalabs.common.identity` extension
+- [kyalabs.io/merchants](https://kyalabs.io/merchants) — Full merchant documentation
+- [kyalabs.io/trust](https://kyalabs.io/trust) — Trust architecture

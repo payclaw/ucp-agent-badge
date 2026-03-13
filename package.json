@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "name": "ucp-agent-badge",
+  "description": "UCP extension spec for io.kyalabs.common.identity — not published to npm",
+  "scripts": {
+    "test": "vitest run reference/"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^3.0.0"
+  }
+}
