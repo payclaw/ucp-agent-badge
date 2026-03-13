@@ -87,6 +87,7 @@ On successful verification, the JWT payload contains these claims:
 | `merchant_domain` | `string?` | Target merchant domain (when declared) |
 | `iat` | `number` | Token issued — Unix timestamp |
 | `exp` | `number` | Token expires — Unix timestamp |
+| `assurance_level` | `string?` | Verification tier (e.g. `"basic"`, `"verified"`) — use for tier pricing |
 
 The `kid` (Key ID) is in the JWT header, not the payload.
 

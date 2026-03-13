@@ -10,7 +10,7 @@ The verification flow follows [UCP's credential verification model](https://gith
 
 ### Steps
 
-```
+```text
 1. Receive JWT token from agent checkout payload
    └─ Field: io.kyalabs.common.identity.token
 
