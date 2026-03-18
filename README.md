@@ -37,6 +37,8 @@ That's it. Agents visiting your store will discover kyaLabs and present a crypto
 
 > **Not on UCP yet?** See [Google's UCP Getting Started Guide](https://developers.google.com/merchant/ucp) to set up your merchant manifest.
 
+> **Shopify merchants:** Your store already serves `/.well-known/ucp` — Shopify ships UCP natively. Add the capability block above to your store's UCP capabilities.
+
 ### What Happens Next
 
 1. A UCP-compliant agent reads your `/.well-known/ucp` manifest
