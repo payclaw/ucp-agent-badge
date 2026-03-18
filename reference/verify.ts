@@ -10,7 +10,7 @@
  * Algorithm:
  *   1. Decode JWT header + payload (base64url)
  *   2. Extract `kid` from header
- *   3. Fetch JWKS from kyalabs.io/.well-known/ucp (cache 1 hour)
+ *   3. Fetch JWKS from www.kyalabs.io/.well-known/ucp (cache 1 hour)
  *   4. Find the signing key matching `kid` in `signing_keys[]`
  *   5. Verify ES256 (ECDSA P-256 + SHA-256) signature via Web Crypto
  *   6. Check `exp` with clock tolerance
@@ -25,18 +25,32 @@
 // ── Types ──
 
 export interface BadgeIdentity {
+  /** Tokenized user ID (sub claim — HMAC hash, no PII) */
   userId: string;
-  agentId: string;
-  intent: string;
-  scopes: string[];
+  /** Target merchant domain (when declared) */
   merchantDomain?: string;
+  /** Session identifier */
+  sessionId?: string;
+  /** Auth method: "mfa_authenticated_human" or "api_key_delegated" */
+  principalType: string;
+  /** Whether the principal's email is verified */
+  principalVerified: boolean;
+  /** Authorization scopes granted (e.g. ["checkout:complete"]) */
+  scopes: string[];
+  /** Token issuer (e.g. "https://kyalabs.io") */
+  issuer: string;
+  /** Unix timestamp — when the token was issued */
   issuedAt: number;
+  /** Unix timestamp — when the token expires */
   expiresAt: number;
+  /** Unique token identifier (jti claim) */
+  jti: string;
+  /** Key ID used to sign the token */
   kid: string;
 }
 
 export interface VerifyOptions {
-  /** JWKS source URL. Default: 'https://kyalabs.io/.well-known/ucp' */
+  /** JWKS source URL. Default: 'https://www.kyalabs.io/.well-known/ucp' */
   jwksUri?: string;
   /** Cache TTL in ms. Default: 3600000 (1 hour) */
   cacheTtlMs?: number;
@@ -151,7 +165,7 @@ async function getCachedKeys(uri: string, cacheTtlMs: number): Promise<Map<strin
 
 // ── Main ──
 
-const DEFAULT_JWKS_URI = "https://kyalabs.io/.well-known/ucp";
+const DEFAULT_JWKS_URI = "https://www.kyalabs.io/.well-known/ucp";
 const DEFAULT_CACHE_TTL_MS = 3600000; // 1 hour
 const DEFAULT_CLOCK_TOLERANCE_SEC = 30;
 
@@ -208,12 +222,15 @@ export async function verify(
     // Build identity
     return {
       userId: String(payload.sub ?? ""),
-      agentId: String(payload.agent_id ?? payload.agentId ?? ""),
-      intent: String(payload.intent ?? ""),
-      scopes: Array.isArray(payload.scopes) ? payload.scopes.map(String) : [],
       merchantDomain: typeof payload.merchant_domain === "string" ? payload.merchant_domain : undefined,
+      sessionId: typeof payload.session_id === "string" ? payload.session_id : undefined,
+      principalType: String(payload.principal_type ?? ""),
+      principalVerified: payload.principal_verified === true,
+      scopes: Array.isArray(payload.scopes) ? payload.scopes.map(String) : [],
+      issuer: typeof payload.iss === "string" ? payload.iss : "",
       issuedAt: typeof payload.iat === "number" ? payload.iat : 0,
       expiresAt: typeof payload.exp === "number" ? payload.exp : 0,
+      jti: typeof payload.jti === "string" ? payload.jti : "",
       kid,
     };
   } catch {

@@ -25,10 +25,14 @@ Add this to the `capabilities` object in your `/.well-known/ucp`:
 ```json
 "io.kyalabs.common.identity": [
   {
-    "version": "2026-03-02",
+    "version": "2026-01-11",
     "extends": "dev.ucp.shopping.checkout",
-    "spec": "https://kyalabs.io/ucp/spec/identity",
-    "schema": "https://kyalabs.io/ucp/schemas/identity.json"
+    "spec": "https://www.kyalabs.io/ucp/spec/identity",
+    "schema": "https://www.kyalabs.io/ucp/schemas/identity.json",
+    "config": {
+      "required": false,
+      "auth_endpoint": "https://www.kyalabs.io/api/oauth/device/authorize"
+    }
   }
 ]
 ```
@@ -51,12 +55,13 @@ That's it. Agents visiting your store will discover kyaLabs and present a crypto
 ```json
 "io.kyalabs.common.identity": [
   {
-    "version": "2026-03-02",
+    "version": "2026-01-11",
     "extends": "dev.ucp.shopping.checkout",
-    "spec": "https://kyalabs.io/ucp/spec/identity",
-    "schema": "https://kyalabs.io/ucp/schemas/identity.json",
+    "spec": "https://www.kyalabs.io/ucp/spec/identity",
+    "schema": "https://www.kyalabs.io/ucp/schemas/identity.json",
     "config": {
-      "required": false
+      "required": false,
+      "auth_endpoint": "https://www.kyalabs.io/api/oauth/device/authorize"
     }
   }
 ]
@@ -64,6 +69,7 @@ That's it. Agents visiting your store will discover kyaLabs and present a crypto
 
 - `required: false` (default) — declared agents are preferred but checkout proceeds without a badge
 - `required: true` — agents without a valid badge receive `requires_escalation`, forcing a user handoff through kyaLabs's OAuth flow
+- `auth_endpoint` — the device authorization endpoint agents use to obtain a badge token
 
 ---
 
@@ -81,7 +87,7 @@ Per [UCP's credential verification model](https://github.com/Universal-Commerce-
    └─ Extract `kid` (Key ID)
    └─ Verify `alg` is "ES256"
 
-3. Fetch signing keys from https://kyalabs.io/.well-known/ucp
+3. Fetch signing keys from https://www.kyalabs.io/.well-known/ucp
    └─ Keys are in the `signing_keys[]` array (UCP profile format)
    └─ Cache the response — recommended TTL: 1 hour
 
@@ -102,15 +108,18 @@ A TypeScript reference implementation is provided at [`reference/verify.ts`](ref
 
 ### Verified Identity Claims
 
-| Claim | Type | Maps to |
-|-------|------|---------|
-| `sub` | `string` | Human principal who authorized the agent |
-| `agent_id` | `string` | Agent identifier |
-| `intent` | `string` | Declared purchase intent |
-| `scopes` | `string[]` | Authorization scopes granted |
+| Claim | Type | Description |
+|-------|------|-------------|
+| `sub` | `string` | Tokenized user ID (HMAC hash — no PII) |
 | `merchant_domain` | `string?` | Target merchant domain (when declared) |
+| `session_id` | `string?` | Session identifier |
+| `principal_type` | `string` | Auth method — `"mfa_authenticated_human"` or `"api_key_delegated"` |
+| `principal_verified` | `boolean` | Whether the principal's email is verified |
+| `scopes` | `string[]` | Authorization scopes (e.g. `["checkout:complete"]`) |
+| `iss` | `string` | Token issuer (e.g. `"https://kyalabs.io"`) |
 | `iat` | `number` | Token issued — Unix timestamp |
 | `exp` | `number` | Token expires — Unix timestamp |
+| `jti` | `string` | Unique token identifier |
 
 ### On failure
 
@@ -123,7 +132,7 @@ Any verification failure — invalid signature, expired token, unknown key, malf
 For merchants who prefer server-side token lookup over local JWT verification, kyaLabs also exposes an [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662) introspection endpoint. No API key required.
 
 ```http
-POST https://kyalabs.io/api/oauth/introspect
+POST https://www.kyalabs.io/api/oauth/introspect
 Content-Type: application/x-www-form-urlencoded
 
 token=pc_v1_...
@@ -192,29 +201,31 @@ Merchants discover signing keys and metadata automatically via standard endpoint
 
 | Resource | URL |
 |----------|-----|
-| Signing keys (JWKS) | [`kyalabs.io/.well-known/ucp`](https://kyalabs.io/.well-known/ucp) |
-| OAuth metadata | [`kyalabs.io/.well-known/oauth-authorization-server`](https://kyalabs.io/.well-known/oauth-authorization-server) |
-| JSON Schema | [`kyalabs.io/schema/identity`](https://kyalabs.io/schema/identity) |
-| Extension docs | [`kyalabs.io/docs/ucp-identity`](https://kyalabs.io/docs/ucp-identity) |
+| Signing keys (JWKS) | [`www.kyalabs.io/.well-known/ucp`](https://www.kyalabs.io/.well-known/ucp) |
+| OAuth metadata | [`www.kyalabs.io/.well-known/oauth-authorization-server`](https://www.kyalabs.io/.well-known/oauth-authorization-server) |
+| JSON Schema | [`www.kyalabs.io/ucp/schemas/identity.json`](https://www.kyalabs.io/ucp/schemas/identity.json) |
+| Extension spec | [`www.kyalabs.io/ucp/spec/identity`](https://www.kyalabs.io/ucp/spec/identity) |
 | UCP specification | [`ucp.dev`](https://ucp.dev) |
 
 ---
 
 ## For Agents / Developers
 
-This repo is the **merchant-facing protocol spec**. If you're a developer or an agent looking to declare identity, see [kyalabs/badge-server](https://github.com/kyalabs/badge-server) — the MCP server that agents use to badge themselves.
+The agent-facing protocol reference is at [kyalabs.io/ucp/spec/identity](https://www.kyalabs.io/ucp/spec/identity) — it covers how agents discover, obtain, and present badge tokens.
+
+If you're building an agent or developer tool that needs to present a kyaLabs badge, see [kyalabs/badge-server](https://github.com/kyalabs/badge-server) — the MCP server that agents use to badge themselves.
 
 | | This repo (`ucp-agent-badge`) | `badge-server` |
 |---|---|---|
 | **Audience** | Merchants, UCP frameworks | Developers, AI agents |
 | **Contains** | Manifest, schema, reference implementation | MCP server, OAuth device flow |
-| **Integration** | Add capability to `/.well-known/ucp`, implement verification | `npx -y @payclaw/badge` |
+| **Integration** | Add capability to `/.well-known/ucp`, implement verification | `npx -y @kyalabs/badge` |
 
-Users authorize agents at: [kyalabs.io/activate](https://kyalabs.io/activate)
+Users authorize agents at: [kyalabs.io/activate](https://www.kyalabs.io/activate)
 
-Full merchant documentation: [kyalabs.io/merchants](https://kyalabs.io/merchants)
+Full merchant documentation: [kyalabs.io/merchants](https://www.kyalabs.io/merchants)
 
-Trust architecture: [kyalabs.io/trust](https://kyalabs.io/trust)
+Trust architecture: [kyalabs.io/trust](https://www.kyalabs.io/trust)
 
 ---
 

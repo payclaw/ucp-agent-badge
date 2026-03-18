@@ -52,10 +52,13 @@ function validPayload(overrides?: Record<string, unknown>) {
   const now = Math.floor(Date.now() / 1000);
   return {
     sub: "user-123",
-    agent_id: "agent-456",
-    intent: "buy coffee",
+    session_id: "sess-abc",
+    principal_type: "mfa_authenticated_human",
+    principal_verified: true,
     scopes: ["checkout:complete"],
     merchant_domain: "starbucks.com",
+    iss: "https://kyalabs.io",
+    jti: "tok-xyz-001",
     iat: now - 60,
     exp: now + 300,
     ...overrides,
@@ -92,10 +95,13 @@ describe("verify()", () => {
     expect(result).not.toBeNull();
     const identity = result as BadgeIdentity;
     expect(identity.userId).toBe("user-123");
-    expect(identity.agentId).toBe("agent-456");
-    expect(identity.intent).toBe("buy coffee");
+    expect(identity.sessionId).toBe("sess-abc");
+    expect(identity.principalType).toBe("mfa_authenticated_human");
+    expect(identity.principalVerified).toBe(true);
     expect(identity.scopes).toEqual(["checkout:complete"]);
     expect(identity.merchantDomain).toBe("starbucks.com");
+    expect(identity.issuer).toBe("https://kyalabs.io");
+    expect(identity.jti).toBe("tok-xyz-001");
     expect(identity.kid).toBe(KID);
     expect(identity.issuedAt).toBeGreaterThan(0);
     expect(identity.expiresAt).toBeGreaterThan(0);

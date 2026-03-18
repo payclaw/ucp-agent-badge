@@ -17,7 +17,7 @@ The verification flow follows [UCP's credential verification model](https://gith
 2. Decode JWT header (base64url → JSON)
    └─ Extract `kid` (Key ID) and verify `alg` is "ES256"
 
-3. Fetch JWKS from https://kyalabs.io/.well-known/ucp
+3. Fetch JWKS from https://www.kyalabs.io/.well-known/ucp
    └─ Cache the response (recommended: 1 hour)
    └─ Keys are in the `signing_keys[]` array (UCP format)
    └─ Fallback: standard JWKS `keys[]` array
@@ -36,12 +36,15 @@ The verification flow follows [UCP's credential verification model](https://gith
    └─ Allow clock tolerance (recommended: 30 seconds)
 
 7. Extract identity claims from payload
-   └─ sub        → userId (human principal)
-   └─ agent_id   → agentId
-   └─ intent     → declared purchase intent
-   └─ scopes     → authorization scopes
-   └─ merchant_domain → target merchant (optional)
-   └─ iat, exp   → issued/expires timestamps
+   └─ sub                → userId (tokenized, no PII)
+   └─ session_id         → sessionId
+   └─ principal_type     → principalType ("mfa_authenticated_human" or "api_key_delegated")
+   └─ principal_verified → principalVerified (boolean)
+   └─ scopes             → authorization scopes
+   └─ merchant_domain    → target merchant (optional)
+   └─ iss                → issuer (e.g. "https://kyalabs.io")
+   └─ jti                → unique token identifier
+   └─ iat, exp           → issued/expires timestamps
 ```
 
 ### Return

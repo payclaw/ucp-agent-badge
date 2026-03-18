@@ -1,23 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kyalabs.io/schema/identity",
+  "$id": "https://www.kyalabs.io/ucp/schemas/identity.json",
   "title": "kyaLabs Agent Identity Extension",
   "description": "UCP extension schema for io.kyalabs.common.identity. Defines the payload an agent includes in the checkout request under the 'io.kyalabs.common.identity' key.",
   "type": "object",
-  "required": ["token", "kid"],
+  "required": ["token"],
   "properties": {
     "token": {
       "type": "string",
-      "description": "ES256-signed JWT issued by kyaLabs. Verify locally against JWKS at kyalabs.io/.well-known/ucp. See reference/verify.ts for the verification algorithm.",
+      "description": "ES256-signed JWT issued by kyaLabs. Obtain via device auth flow (POST /api/oauth/device/authorize) or API key (POST /api/agent-identity). Verify locally against JWKS at kyalabs.io/.well-known/ucp. See reference/verify.ts for the verification algorithm.",
       "minLength": 1
     },
     "kid": {
       "type": "string",
-      "description": "Key ID used to sign the token. Matches a key in the issuer's JWKS, discoverable via the OAuth authorization server metadata.",
+      "description": "Key ID matching kyaLabs JWKS at /.well-known/jwks.json. Optional — can be extracted from the JWT header.",
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "examples": [
     {
       "token": "<example-es256-jwt>",

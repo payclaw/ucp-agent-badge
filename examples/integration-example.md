@@ -11,10 +11,14 @@ Add this to the `capabilities` object in your `/.well-known/ucp`:
 ```json
 "io.kyalabs.common.identity": [
   {
-    "version": "2026-03-02",
+    "version": "2026-01-11",
     "extends": "dev.ucp.shopping.checkout",
-    "spec": "https://kyalabs.io/ucp/spec/identity",
-    "schema": "https://kyalabs.io/ucp/schemas/identity.json"
+    "spec": "https://www.kyalabs.io/ucp/spec/identity",
+    "schema": "https://www.kyalabs.io/ucp/schemas/identity.json",
+    "config": {
+      "required": false,
+      "auth_endpoint": "https://www.kyalabs.io/api/oauth/device/authorize"
+    }
   }
 ]
 ```
@@ -37,7 +41,7 @@ When an agent submits a checkout request, the kyaLabs badge arrives as an ES256-
    └─ Extract `kid` (Key ID)
    └─ Verify `alg` is "ES256"
 
-3. Fetch signing keys: GET https://kyalabs.io/.well-known/ucp
+3. Fetch signing keys: GET https://www.kyalabs.io/.well-known/ucp
    └─ Keys are in the `signing_keys[]` array
    └─ Cache the response (recommended: 1 hour TTL)
 
@@ -63,10 +67,13 @@ On successful verification, the JWT payload contains these claims:
 ```json
 {
   "sub": "user-123",
-  "agent_id": "agent-456",
-  "intent": "buy coffee",
+  "session_id": "sess-abc",
+  "principal_type": "mfa_authenticated_human",
+  "principal_verified": true,
   "scopes": ["checkout:complete"],
   "merchant_domain": "store.com",
+  "iss": "https://kyalabs.io",
+  "jti": "tok-xyz-001",
   "iat": 1741651200,
   "exp": 1741654800
 }
@@ -76,14 +83,16 @@ On successful verification, the JWT payload contains these claims:
 
 | Claim | Type | Description |
 |-------|------|-------------|
-| `sub` | `string` | Human principal who authorized the agent |
-| `agent_id` | `string` | Agent identifier |
-| `intent` | `string` | Declared purchase intent |
-| `scopes` | `string[]` | Authorization scopes granted |
+| `sub` | `string` | Tokenized user ID (HMAC hash, no PII) |
+| `session_id` | `string?` | Session identifier |
+| `principal_type` | `string` | Auth method: `"mfa_authenticated_human"` or `"api_key_delegated"` |
+| `principal_verified` | `boolean` | Whether the principal's email is verified |
+| `scopes` | `string[]` | Authorization scopes granted (e.g. `["checkout:complete"]`) |
 | `merchant_domain` | `string?` | Target merchant domain (when declared) |
+| `iss` | `string` | Token issuer (e.g. `"https://kyalabs.io"`) |
+| `jti` | `string` | Unique token identifier |
 | `iat` | `number` | Token issued — Unix timestamp |
 | `exp` | `number` | Token expires — Unix timestamp |
-| `assurance_level` | `string?` | Verification tier (e.g. `"basic"`, `"verified"`) — use for tier pricing |
 
 The `kid` (Key ID) is in the JWT header, not the payload.
 
@@ -95,7 +104,7 @@ The `kid` (Key ID) is in the JWT header, not the payload.
 IF verification succeeds:
   • Authorized agent — verified human principal behind this session
   • Skip CAPTCHA for verified agents
-  • Apply tier pricing based on assurance_level
+  • Apply graduated trust based on principal_type
   • Fast-track checkout
   • Log for audit trail
 
@@ -120,5 +129,5 @@ IF verification fails (invalid signature, expired, unknown key):
 - [Reference implementation](../reference/verify.ts) — TypeScript verification code with full test suite
 - [how-it-works.md](../how-it-works.md) — Architecture overview: what a UCP credential provider is and how kyaLabs fits
 - [JSON Schema](../schema/io.kyalabs.common.identity.json) — Canonical schema for the extension
-- [kyalabs.io/merchants](https://kyalabs.io/merchants) — Full merchant documentation
-- [kyalabs.io/trust](https://kyalabs.io/trust) — Trust architecture
+- [kyalabs.io/merchants](https://www.kyalabs.io/merchants) — Full merchant documentation
+- [kyalabs.io/trust](https://www.kyalabs.io/trust) — Trust architecture

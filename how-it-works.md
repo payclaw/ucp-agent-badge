@@ -10,15 +10,15 @@ kyaLabs is a credential provider for agent identity. It proves that the agent op
 
 Three things:
 
-1. **The agent is authorized.** A real human granted this specific agent permission to act on their behalf, via Google or Apple sign-in.
-2. **The human is verified.** The principal behind the session completed identity verification. The agent inherits that verification — it doesn't generate its own.
-3. **The agent is declaring intent.** Every action is a declared trip with a stated purpose. The agent is not hiding what it's doing — it's announcing it.
+1. **The agent is authorized.** A real human granted this specific agent permission to act on their behalf, via device authorization or API key delegation.
+2. **The human is verified.** The principal behind the session completed identity verification (`principal_verified`). The agent inherits that verification — it doesn't generate its own.
+3. **The session is scoped.** Every token declares its authorization scopes (e.g. `checkout:complete`) and is bound to a specific session. The agent is not hiding what it's doing — it's announcing it.
 
 This is the difference between an authorized actor and a bot. The architecture enforces correct behavior: the agent cannot operate without human consent, and every session is traceable to a verified principal.
 
 ## How the flow works
 
-1. A user installs kyaLabs and authorizes their agent via consent key
+1. A user authorizes their agent via the device auth flow or API key delegation
 2. The agent arrives at a merchant's site and calls `getAgentIdentity`
 3. kyaLabs issues an ES256-signed JWT — the agent's declaration of identity
 4. The agent presents this token to the merchant at checkout via UCP
@@ -37,22 +37,22 @@ The merchant's existing defenses stay intact. kyaLabs is a signal layer — a sk
 ## What merchants don't need
 
 - **No kyaLabs account.** Merchants verify tokens using published signing keys — no signup, no dashboard, no credentials.
-- **No API key.** Verification uses public signing keys fetched from `kyalabs.io/.well-known/ucp`.
+- **No API key.** Verification uses public signing keys fetched from `www.kyalabs.io/.well-known/ucp`.
 - **No integration fee.** The verification algorithm is documented and the [reference implementation](reference/verify.ts) is MIT-licensed.
 - **No SDK or package install.** The algorithm is standard JWKS + ES256 — implement it in any server-side language.
 
-## Trust tiers
+## Trust signals in the token
 
-Merchants can make graduated trust decisions based on the agent's `assurance_level`:
+Merchants can make graduated trust decisions using claims in the verified JWT:
 
-| Level | Verified transactions | Signal |
-|-------|----------------------|--------|
-| `starter` | < 10 | New user — human authorization confirmed, limited history |
-| `regular` | 10–49 | Established — consistent, verified commerce activity |
-| `veteran` | 50–199 | Experienced — significant track record |
-| `elite` | 200+ | High-trust — extensive verified history |
+| Claim | What it tells you |
+|-------|-------------------|
+| `principal_type` | How the human authenticated — `"mfa_authenticated_human"` (interactive MFA) or `"api_key_delegated"` (API key) |
+| `principal_verified` | Whether the principal's email is verified (`true` / `false`) |
+| `scopes` | What the agent is authorized to do (e.g. `["checkout:complete"]`) |
+| `session_id` | Links multiple requests to the same session for audit |
 
-A `starter` badge still proves human authorization. The tier reflects history, not validity.
+An `api_key_delegated` badge still proves human authorization. The `principal_type` reflects the auth method, not the trust level.
 
 ---
 
@@ -60,5 +60,5 @@ A `starter` badge still proves human authorization. The tier reflects history, n
 
 - [Integration example](examples/integration-example.md) — Add kyaLabs verification to your checkout in 4 steps
 - [JSON Schema](schema/io.kyalabs.common.identity.json) — Canonical schema for the `io.kyalabs.common.identity` extension
-- [kyalabs.io/merchants](https://kyalabs.io/merchants) — Full merchant documentation
-- [kyalabs.io/trust](https://kyalabs.io/trust) — Trust architecture
+- [kyalabs.io/merchants](https://www.kyalabs.io/merchants) — Full merchant documentation
+- [kyalabs.io/trust](https://www.kyalabs.io/trust) — Trust architecture
