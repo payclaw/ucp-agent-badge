@@ -1,26 +1,37 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.kyalabs.io/ucp/schemas/identity.json",
-  "title": "kyaLabs Agent Identity Extension",
-  "description": "UCP extension schema for io.kyalabs.common.identity. Defines the payload an agent includes in the checkout request under the 'io.kyalabs.common.identity' key.",
-  "type": "object",
-  "required": ["token"],
-  "properties": {
-    "token": {
-      "type": "string",
-      "description": "ES256-signed JWT issued by kyaLabs. Obtain via device auth flow (POST /api/oauth/device/authorize) or API key (POST /api/agent-identity). Verify locally against JWKS at kyalabs.io/.well-known/ucp. See reference/verify.ts for the verification algorithm.",
-      "minLength": 1
+  "$ref": "#/$defs/kya_identity_object",
+  "title": "kyaLabs Identity Linking",
+  "description": "Extension schema for io.kyalabs.common.identity — agents present a kyaLabs-issued JWT to verify identity at checkout. Obtain tokens via device auth flow (POST https://www.kyalabs.io/api/oauth/device/authorize) or API key (POST https://www.kyalabs.io/api/agent-identity). Full protocol: https://www.kyalabs.io/ucp/spec/identity",
+  "$defs": {
+    "kya_identity_object": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "ES256-signed JWT issued by kyaLabs. Obtain via device auth flow (POST /api/oauth/device/authorize) or API key (POST /api/agent-identity). See https://www.kyalabs.io/ucp/spec/identity#obtain-token"
+        },
+        "kid": {
+          "type": "string",
+          "description": "Key ID matching kyaLabs JWKS at /.well-known/jwks.json. Optional — can be extracted from the JWT header."
+        }
+      },
+      "required": ["token"]
     },
-    "kid": {
-      "type": "string",
-      "description": "Key ID matching kyaLabs JWKS at /.well-known/jwks.json. Optional — can be extracted from the JWT header.",
-      "minLength": 1
+    "dev.ucp.shopping.checkout": {
+      "title": "Checkout with kyaLabs Identity",
+      "allOf": [
+        { "$ref": "https://ucp.dev/schemas/shopping/checkout.json" },
+        {
+          "type": "object",
+          "properties": {
+            "io.kyalabs.common.identity": {
+              "$ref": "#/$defs/kya_identity_object"
+            }
+          }
+        }
+      ]
     }
-  },
-  "examples": [
-    {
-      "token": "<example-es256-jwt>",
-      "kid": "kyalabs-badge-v1"
-    }
-  ]
+  }
 }
